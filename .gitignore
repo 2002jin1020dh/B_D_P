@@ -1,0 +1,25 @@
+# Large data files
+data/processed/yelp_preprocessed.csv
+data/raw/
+
+# Model checkpoints (too large)
+outputs/checkpoints/best_bert.pt
+outputs/checkpoints/best_fusion.pt
+
+# Numpy feature arrays
+data/features/*.npy
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
