@@ -36,7 +36,7 @@ BCEWithLogitsLoss pos_weight 적용
 
 -> 언더 샘플링으로 10만 건 : 10만 건 불균형 해소 함
 
-<img width="1274" height="926" alt="image" src="https://github.com/user-attachments/assets/0042d9d4-776d-4ea9-a41f-4b970b1c2b7c" />
+
 
 
 
