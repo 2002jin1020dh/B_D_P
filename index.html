@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>가짜 리뷰 탐지 모델 성능 보고서</title>
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2234;
+    --border: rgba(255,255,255,0.07);
+    --accent: #4f8ef7;
+    --accent2: #7c3aed;
+    --green: #22c55e;
+    --yellow: #f59e0b;
+    --red: #ef4444;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Pretendard', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(79,142,247,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79,142,247,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 60px 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 64px;
+    animation: fadeDown 0.8s ease both;
+  }
+  .tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+    background: rgba(79,142,247,0.1);
+    border: 1px solid rgba(79,142,247,0.2);
+    padding: 4px 12px;
+    border-radius: 2px;
+    margin-bottom: 20px;
+  }
+  h1 {
+    font-size: clamp(28px, 5vw, 44px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    margin-bottom: 12px;
+  }
+  h1 span {
+    background: linear-gradient(135deg, #4f8ef7, #7c3aed);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 14px;
+    font-family: var(--mono);
+  }
+
+  section { margin-bottom: 56px; }
+  .section-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(79,142,247,0.4), transparent);
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 56px;
+    animation: fadeUp 0.8s 0.2s ease both;
+  }
+  @media (max-width: 640px) { .summary-grid { grid-template-columns: 1fr; } }
+
+  .summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+  .summary-card:hover { transform: translateY(-3px); border-color: rgba(79,142,247,0.3); }
+  .summary-card.best { border-color: rgba(79,142,247,0.4); }
+  .summary-card.best::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(79,142,247,0.07), rgba(124,58,237,0.07));
+    pointer-events: none;
+  }
+
+  .model-name {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-family: var(--mono);
+  }
+  .badge-best { background: rgba(79,142,247,0.15); color: var(--accent); border: 1px solid rgba(79,142,247,0.3); }
+  .badge-mid  { background: rgba(245,158,11,0.1);  color: var(--yellow); border: 1px solid rgba(245,158,11,0.2); }
+  .badge-low  { background: rgba(100,116,139,0.1); color: var(--muted);  border: 1px solid var(--border); }
+
+  .big-number {
+    font-size: 40px;
+    font-weight: 700;
+    font-family: var(--mono);
+    letter-spacing: -0.03em;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .big-number.blue   { color: var(--accent); }
+  .big-number.purple { color: #a78bfa; }
+  .big-number.green  { color: var(--green); }
+  .metric-label { font-size: 12px; color: var(--muted); }
+
+  .sub-metrics {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 20px;
+  }
+  .sub-metric .val { font-family: var(--mono); font-size: 16px; font-weight: 600; color: var(--text); }
+  .sub-metric .lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .bar-section { animation: fadeUp 0.8s 0.3s ease both; }
+  .bar-group { margin-bottom: 20px; }
+  .bar-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
+  .bar-label { color: var(--text); font-weight: 500; }
+  .bar-value { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+  .bar-track {
+    height: 8px;
+    background: var(--surface2);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transform: scaleX(0);
+    transform-origin: left;
+    animation: growBar 1s ease forwards;
+  }
+  .bar-fill.f1-mlp30  { background: #475569; animation-delay: 0.4s; }
+  .bar-fill.f1-mlp50  { background: #64748b; animation-delay: 0.5s; }
+  .bar-fill.f1-bert   { background: #4f8ef7; animation-delay: 0.6s; }
+  .bar-fill.f1-fusion { background: linear-gradient(90deg, #4f8ef7, #7c3aed); animation-delay: 0.7s; }
+  .bar-fill.auc-mlp30  { background: #475569; animation-delay: 0.4s; }
+  .bar-fill.auc-mlp50  { background: #64748b; animation-delay: 0.5s; }
+  .bar-fill.auc-bert   { background: #4f8ef7; animation-delay: 0.6s; }
+  .bar-fill.auc-fusion { background: linear-gradient(90deg, #4f8ef7, #7c3aed); animation-delay: 0.7s; }
+
+  .train-section { animation: fadeUp 0.8s 0.4s ease both; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  .tab {
+    padding: 7px 16px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: var(--mono);
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    transition: all 0.2s;
+  }
+  .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    text-align: left;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 11px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    font-family: var(--mono);
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .best-row td { color: #fbbf24; }
+  .star  { color: #fbbf24; }
+  td.up    { color: #22c55e; }
+  td.muted { color: var(--muted); }
+
+  .cm-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    animation: fadeUp 0.8s 0.5s ease both;
+  }
+  .cm-card { padding: 24px; }
+  .cm-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .cm-sub { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-bottom: 18px; }
+
+  .cm-table { width: 100%; border-collapse: separate; border-spacing: 4px; }
+  .cm-table th {
+    font-size: 10px; color: var(--muted); text-align: center;
+    padding: 6px 4px; border: none; font-family: var(--mono); letter-spacing: 0;
+  }
+  .cm-table td {
+    text-align: center; padding: 14px 8px; border-radius: 8px;
+    font-family: var(--mono); font-weight: 600; font-size: 15px; border: none;
+  }
+  td.cm-tp { background: rgba(34,197,94,0.15);  color: #4ade80; }
+  td.cm-tn { background: rgba(34,197,94,0.15);  color: #4ade80; }
+  td.cm-fp { background: rgba(239,68,68,0.1);   color: #f87171; font-size: 13px; }
+  td.cm-fn { background: rgba(239,68,68,0.1);   color: #f87171; font-size: 13px; }
+
+  .insight-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    animation: fadeUp 0.8s 0.6s ease both;
+  }
+  .insight-card { padding: 22px; border-left: 3px solid; }
+  .insight-card.blue   { border-color: var(--accent); }
+  .insight-card.purple { border-color: #7c3aed; }
+  .insight-card.green  { border-color: var(--green); }
+  .insight-card.yellow { border-color: var(--yellow); }
+
+  .insight-title {
+    font-size: 13px; font-weight: 600; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .insight-icon { font-size: 16px; }
+  .insight-text { font-size: 13px; color: var(--muted); line-height: 1.65; }
+
+  @keyframes fadeDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: none; } }
+  @keyframes fadeUp   { from { opacity: 0; transform: translateY(20px);  } to { opacity: 1; transform: none; } }
+  @keyframes growBar  { to { transform: scaleX(1); } }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  footer {
+    text-align: center;
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="tag">FAKE REVIEW DETECTION · YELP DATASET</div>
+    <h1>가짜 리뷰 탐지<br><span>모델 성능 평가 보고서</span></h1>
+    <div class="subtitle">MLP · BERT · Fusion → 3 모델 비교 분석</div>
+  </header>
+
+  <div class="section-label">최종 성능 요약</div>
+  <div class="summary-grid">
+    <div class="summary-card">
+      <div class="model-name">MLP <span class="badge badge-low">Baseline</span></div>
+      <div class="big-number blue">75.1</div>
+      <div class="metric-label">Macro F1-Score (%)</div>
+      <div class="sub-metrics">
+        <div class="sub-metric"><div class="val">0.8298</div><div class="lbl">AUC-ROC</div></div>
+        <div class="sub-metric"><div class="val">75%</div><div class="lbl">Accuracy</div></div>
+        <div class="sub-metric"><div class="val">50 ep</div><div class="lbl">최적 에폭</div></div>
+      </div>
+    </div>
+    <div class="summary-card">
+      <div class="model-name">BERT <span class="badge badge-mid">Strong</span></div>
+      <div class="big-number purple">87.3</div>
+      <div class="metric-label">Macro F1-Score (%)</div>
+      <div class="sub-metrics">
+        <div class="sub-metric"><div class="val">0.9360</div><div class="lbl">AUC-ROC</div></div>
+        <div class="sub-metric"><div class="val">87%</div><div class="lbl">Accuracy</div></div>
+        <div class="sub-metric"><div class="val">5 ep</div><div class="lbl">파인튜닝</div></div>
+      </div>
+    </div>
+    <div class="summary-card best">
+      <div class="model-name">Fusion <span class="badge badge-best">★ Best</span></div>
+      <div class="big-number green">87.4</div>
+      <div class="metric-label">Macro F1-Score (%)</div>
+      <div class="sub-metrics">
+        <div class="sub-metric"><div class="val">0.9411</div><div class="lbl">AUC-ROC</div></div>
+        <div class="sub-metric"><div class="val">87%</div><div class="lbl">Accuracy</div></div>
+        <div class="sub-metric"><div class="val">균형</div><div class="lbl">클래스 F1</div></div>
+      </div>
+    </div>
+  </div>
+
+  <section class="bar-section">
+    <div class="section-label">성능 비교 시각화</div>
+    <div class="card">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 40px;">
+        <div>
+          <div style="font-size:12px; color:var(--muted); font-family:var(--mono); margin-bottom:20px;">MACRO F1-SCORE</div>
+          <div class="bar-group">
+            <div class="bar-header"><span class="bar-label">MLP (30ep)</span><span class="bar-value">0.7460</span></div>
+            <div class="bar-track"><div class="bar-fill f1-mlp30" style="width:85.3%"></div></div>
+          </div>
+          <div class="bar-group">
+            <div class="bar-header"><span class="bar-label">MLP (50ep)</span><span class="bar-value">0.7513</span></div>
+            <div class="bar-track"><div class="bar-fill f1-mlp50" style="width:85.9%"></div></div>
+          </div>
+          <div class="bar-group">
+            <div class="bar-header"><span class="bar-label">BERT</span><span class="bar-value">0.8731</span></div>
+            <div class="bar-track"><div class="bar-fill f1-bert" style="width:99.9%"></div></div>
+          </div>
+          <div class="bar-group">
+            <div class="bar-header"><span class="bar-label">Fusion ★</span><span class="bar-value">0.8739</span></div>
+            <div class="bar-track"><div class="bar-fill f1-fusion" style="width:100%"></div></div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px; color:var(--muted); font-family:var(--mono); margin-bottom:20px;">AUC-ROC</div>
+          <div class="bar-group">
+            <div class="bar-header"><span class="bar-label">MLP (30ep)</span><span class="bar-value">0.8191</span></div>
+            <div class="bar-track"><div class="bar-fill auc-mlp30" style="width:86.9%"></div></div>
+          </div>
+          <div class="bar-group">
+            <div class="bar-header"><span class="bar-label">MLP (50ep)</span><span class="bar-value">0.8298</span></div>
+            <div class="bar-track"><div class="bar-fill auc-mlp50" style="width:88.2%"></div></div>
+          </div>
+          <div class="bar-group">
+            <div class="bar-header"><span class="bar-label">BERT</span><span class="bar-value">0.9360</span></div>
+            <div class="bar-track"><div class="bar-fill auc-bert" style="width:99.5%"></div></div>
+          </div>
+          <div class="bar-group">
+            <div class="bar-header"><span class="bar-label">Fusion ★</span><span class="bar-value">0.9411</span></div>
+            <div class="bar-track"><div class="bar-fill auc-fusion" style="width:100%"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="train-section">
+    <div class="section-label">학습 이력</div>
+    <div class="card">
+      <div class="tabs">
+        <button class="tab active" onclick="showTab('mlp30', this)">MLP 30ep</button>
+        <button class="tab" onclick="showTab('mlp50', this)">MLP 50ep</button>
+        <button class="tab" onclick="showTab('bert', this)">BERT 5ep</button>
+      </div>
+
+      <div class="tab-panel active" id="tab-mlp30">
+        <div style="font-size:12px; color:var(--muted); font-family:var(--mono); margin-bottom:16px;">
+          Batch: 2048 / LR: 0.001 / Threshold: 0.5 / 최고 Val F1: <span style="color:#fbbf24">0.7471</span> (Epoch 30)
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>EPOCH</th><th>LOSS</th><th>VAL F1</th><th>VAL AUC</th><th></th></tr></thead>
+            <tbody>
+              <tr><td>01</td><td class="muted">0.5799</td><td>0.7280</td><td>0.7963</td><td class="star">★ best</td></tr>
+              <tr><td>05</td><td class="muted">0.5469</td><td>0.7346</td><td>0.8053</td><td class="star">★ best</td></tr>
+              <tr><td>10</td><td class="muted">0.5388</td><td>0.7390</td><td>0.8109</td><td class="star">★ best</td></tr>
+              <tr><td>15</td><td class="muted">0.5334</td><td>0.7414</td><td>0.8150</td><td class="muted">-</td></tr>
+              <tr><td>20</td><td class="muted">0.5282</td><td>0.7435</td><td>0.8174</td><td class="muted">-</td></tr>
+              <tr><td>25</td><td class="muted">0.5246</td><td>0.7449</td><td>0.8204</td><td class="muted">-</td></tr>
+              <tr class="best-row"><td>30</td><td>0.5233</td><td>0.7471</td><td>0.8220</td><td class="star">★ best</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-mlp50">
+        <div style="font-size:12px; color:var(--muted); font-family:var(--mono); margin-bottom:16px;">
+          Batch: 2048 / LR: 0.001 / Threshold: 0.46 / 최고 Val F1: <span style="color:#fbbf24">0.7540</span> (Epoch 48)
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>EPOCH</th><th>LOSS</th><th>VAL F1</th><th>VAL AUC</th><th></th></tr></thead>
+            <tbody>
+              <tr><td>01</td><td class="muted">0.5770</td><td>0.7260</td><td>0.7963</td><td class="star">★ best</td></tr>
+              <tr><td>05</td><td class="muted">0.5458</td><td>0.7365</td><td>0.8061</td><td class="star">★ best</td></tr>
+              <tr><td>10</td><td class="muted">0.5373</td><td>0.7376</td><td>0.8115</td><td class="muted">-</td></tr>
+              <tr><td>15</td><td class="muted">0.5335</td><td>0.7399</td><td>0.8148</td><td class="star">★ best</td></tr>
+              <tr><td>20</td><td class="muted">0.5289</td><td>0.7433</td><td>0.8183</td><td class="star">★ best</td></tr>
+              <tr><td>25</td><td class="muted">0.5254</td><td>0.7445</td><td>0.8213</td><td class="muted">-</td></tr>
+              <tr><td>30</td><td class="muted">0.5195</td><td>0.7476</td><td>0.8248</td><td class="star">★ best</td></tr>
+              <tr><td>35</td><td class="muted">0.5158</td><td>0.7476</td><td>0.8272</td><td class="muted">-</td></tr>
+              <tr><td>40</td><td class="muted">0.5144</td><td>0.7501</td><td>0.8290</td><td class="star">★ best</td></tr>
+              <tr><td>45</td><td class="muted">0.5120</td><td>0.7521</td><td>0.8315</td><td class="muted">-</td></tr>
+              <tr class="best-row"><td>50</td><td>0.5099</td><td>0.7510</td><td>0.8323</td><td class="muted">-</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-bert">
+        <div style="font-size:12px; color:var(--muted); font-family:var(--mono); margin-bottom:16px;">
+          Batch: 32 / LR: 2e-05 / 최고 Val F1: <span style="color:#fbbf24">0.8757</span> (Epoch 5)
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>EPOCH</th><th>LOSS</th><th>VAL F1</th><th>VAL AUC</th><th></th></tr></thead>
+            <tbody>
+              <tr><td>01</td><td class="muted">0.4760</td><td class="up">0.8314</td><td class="up">0.9089</td><td class="star">★ best</td></tr>
+              <tr><td>02</td><td class="muted">0.3282</td><td class="up">0.8446</td><td class="up">0.9270</td><td class="star">★ best</td></tr>
+              <tr><td>03</td><td class="muted">0.2302</td><td class="up">0.8683</td><td class="up">0.9393</td><td class="star">★ best</td></tr>
+              <tr><td>04</td><td class="muted">0.1631</td><td>0.8564</td><td>0.9340</td><td class="muted">-</td></tr>
+              <tr class="best-row"><td>05</td><td>0.1247</td><td>0.8757</td><td>0.9391</td><td class="star">★ best</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-label">혼동 행렬 (Confusion Matrix)</div>
+    <div class="cm-grid">
+      <div class="card cm-card">
+        <div class="cm-title">MLP (50 Epochs)</div>
+        <div class="cm-sub">F1: 0.7513 · AUC: 0.8298</div>
+        <table class="cm-table">
+          <tr><th></th><th>예측 진짜(0)</th><th>예측 가짜(1)</th></tr>
+          <tr><th>실제 진짜(0)</th><td class="cm-tp">7,175</td><td class="cm-fp">2,825</td></tr>
+          <tr><th>실제 가짜(1)</th><td class="cm-fn">2,143</td><td class="cm-tn">7,857</td></tr>
+        </table>
+      </div>
+      <div class="card cm-card">
+        <div class="cm-title">BERT</div>
+        <div class="cm-sub">F1: 0.8731 · AUC: 0.9360</div>
+        <table class="cm-table">
+          <tr><th></th><th>예측 진짜(0)</th><th>예측 가짜(1)</th></tr>
+          <tr><th>실제 진짜(0)</th><td class="cm-tp">8,969</td><td class="cm-fp">1,031</td></tr>
+          <tr><th>실제 가짜(1)</th><td class="cm-fn">1,505</td><td class="cm-tn">8,495</td></tr>
+        </table>
+      </div>
+      <div class="card cm-card" style="border-color:rgba(79,142,247,0.35);">
+        <div class="cm-title" style="color:var(--accent)">Fusion ★ Best</div>
+        <div class="cm-sub">F1: 0.8739 · AUC: 0.9411</div>
+        <table class="cm-table">
+          <tr><th></th><th>예측 진짜(0)</th><th>예측 가짜(1)</th></tr>
+          <tr><th>실제 진짜(0)</th><td class="cm-tp">8,656</td><td class="cm-fp">1,344</td></tr>
+          <tr><th>실제 가짜(1)</th><td class="cm-fn">1,177</td><td class="cm-tn">8,823</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-label">클래스별 분류 성능</div>
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>모델</th><th>클래스</th><th>Precision</th><th>Recall</th><th>F1-Score</th><th>Support</th></tr>
+          </thead>
+          <tbody>
+            <tr><td rowspan="2" style="border-right:1px solid var(--border); color:var(--muted)">MLP<br><span style="font-size:10px">30ep</span></td><td>진짜 (0)</td><td>0.75</td><td>0.75</td><td>0.75</td><td class="muted">10,000</td></tr>
+            <tr><td>가짜 (1)</td><td>0.75</td><td>0.74</td><td>0.75</td><td class="muted">10,000</td></tr>
+            <tr style="border-top:1px solid var(--border)"><td rowspan="2" style="border-right:1px solid var(--border); color:var(--muted)">MLP<br><span style="font-size:10px">50ep</span></td><td>진짜 (0)</td><td>0.77</td><td>0.72</td><td>0.74</td><td class="muted">10,000</td></tr>
+            <tr><td>가짜 (1)</td><td>0.74</td><td class="up">0.79</td><td>0.76</td><td class="muted">10,000</td></tr>
+            <tr style="border-top:1px solid var(--border)"><td rowspan="2" style="border-right:1px solid var(--border); color:#a78bfa">BERT</td><td>진짜 (0)</td><td class="up">0.86</td><td class="up">0.90</td><td class="up">0.88</td><td class="muted">10,000</td></tr>
+            <tr><td>가짜 (1)</td><td class="up">0.89</td><td>0.85</td><td class="up">0.87</td><td class="muted">10,000</td></tr>
+            <tr style="border-top:1px solid var(--border)"><td rowspan="2" style="border-right:1px solid var(--border); color:var(--accent)">Fusion<br><span style="font-size:10px">★ Best</span></td><td>진짜 (0)</td><td class="up">0.88</td><td>0.87</td><td class="up">0.87</td><td class="muted">10,000</td></tr>
+            <tr><td>가짜 (1)</td><td>0.87</td><td class="up">0.88</td><td class="up">0.87</td><td class="muted">10,000</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-label">주요 분석 인사이트</div>
+    <div class="insight-grid">
+      <div class="card insight-card blue">
+        <div class="insight-title"><span class="insight-icon">📈</span> 에폭 증가 효과</div>
+        <div class="insight-text">MLP 30ep → 50ep 증가 시 F1 +0.53%p, AUC +1.07%p 향상. Threshold 0.46 조정으로 가짜 탐지 Recall 74% → 79%로 개선.</div>
+      </div>
+      <div class="card insight-card purple">
+        <div class="insight-title"><span class="insight-icon">⚡</span> BERT 압도적 도약</div>
+        <div class="insight-text">단 5 에폭 파인튜닝으로 MLP 대비 F1 +12.4%p, AUC +11.7%p 향상. 텍스트 의미 이해 능력의 명확한 우위 확인.</div>
+      </div>
+      <div class="card insight-card green">
+        <div class="insight-title"><span class="insight-icon">🏆</span> Fusion 최고 성능</div>
+        <div class="insight-text">AUC 0.9411로 전체 최고. 가짜(1) Recall 0.88로 BERT 대비 3%p 향상. 진짜/가짜 F1 균형(0.87/0.87) 완벽.</div>
+      </div>
+      <div class="card insight-card yellow">
+        <div class="insight-title"><span class="insight-icon">💡</span> 권고 사항</div>
+        <div class="insight-text">실서비스 적용 시 Fusion 모델 우선 권장. 경량 환경에서는 BERT 단독 활용. MLP는 수치 피처 기반 빠른 추론에 적합.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    FAKE REVIEW DETECTION REPORT · YELP DATASET · TEST SET 20,000 (진짜 10K / 가짜 10K)
+  </footer>
+</div>
+
+<script>
+function showTab(id, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  btn.classList.add('active');
+}
+</script>
+</body>
+</html>
